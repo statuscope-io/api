@@ -1,0 +1,158 @@
+openapi: 3.0.1
+info:
+  description: >-
+    Definition of the Statuscope.io API. Find more on https://docs.statuscope.io/.
+  version: 1.0.0
+  title: Statuscope.io API
+  termsOfService: 'https://docs.statuscope.io/terms/'
+  contact:
+    email: hello@statuscope.io
+  license:
+    name: Apache 2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+
+servers:
+  - url: 'https://{env}.statuscope.io/'
+    description: Different environments
+    variables:
+      env:
+        default: api
+        enum:
+          - staging
+          - api
+paths:
+  '/tasks/{task_id}':
+    post:
+      parameters:
+        - name: task_id
+          description: ID of the task in question
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-zA-Z0-9_]+$'
+
+      summary: Set/get task properties
+
+      description: >-
+        Updates a task with success or failure state, or returns current task
+        state and properties
+
+      requestBody:
+        description: Representation of a task state update
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              properties:
+                token:
+                  description: Auth token of the task or the user
+                  $ref: '#/components/parameters/token'
+                status:
+                  description: New status of the task
+                  $ref: '#/components/parameters/status'
+
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/heartbeat_task_success'
+              - $ref: '#/components/schemas/heartbeat_task_failure'
+              - $ref: '#/components/schemas/log_task_update'
+
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Operation successful
+
+        '400':
+          description: KO
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Operation failed
+components:
+  schemas:
+    heartbeat_task_success:
+      example: 'token=5544ea2e&status=OK'
+      properties:
+        token:
+          $ref: '#/components/parameters/token'
+        status:
+          $ref: '#/components/parameters/status'
+        reason:
+          required: false
+          $ref: '#/components/parameters/reason'
+
+    heartbeat_task_failure:
+      example: 'token=5544ea2e&status=OK&reason=No space left on device'
+      properties:
+        token:
+          $ref: '#/components/parameters/token'
+        status:
+          $ref: '#/components/parameters/status'
+        reason:
+          required: true
+          $ref: '#/components/parameters/reason'
+
+    log_task_update:
+      example: 'token=5544ea2e&severity=warning&message=Cannot fetch user avatar'
+      properties:
+        token:
+          $ref: '#/components/parameters/token'
+        status:
+          $ref: '#/components/parameters/status'
+        message:
+          $ref: '#/components/parameters/reason'
+        severity:
+          $ref: '#/components/parameters/severity'
+
+  parameters:
+    status:
+      name: status
+      in: query
+      description: New status of the task
+      schema:
+        type: string
+        enum:
+          - true
+          - false
+
+    reason:
+      name: reason
+      in: query
+      description: Description of new status' cause
+      schema:
+        type: string
+
+    severity:
+      name: severity
+      in: query
+      description: Severity level of corresponding log message
+      schema:
+        type: string
+        enum: [ debug, info, warning, error, alert ]
+
+    token:
+      name: token
+      in: query
+      description: Task-specific API key or user's API key
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9]+$'
