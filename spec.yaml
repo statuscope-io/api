@@ -46,10 +46,8 @@ paths:
             schema:
               properties:
                 token:
-                  description: Auth token of the task or the user
                   $ref: '#/components/parameters/token'
                 status:
-                  description: New status of the task
                   $ref: '#/components/parameters/status'
 
           application/json:
@@ -67,12 +65,13 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: boolean
-                    example: false
+                  result:
+                    type: string
+                    enum: [ 'OK' ]
+                    example: OK
                   message:
                     type: string
-                    example: Operation successful
+                    example: 'Task updated'
 
         '400':
           description: KO
@@ -81,15 +80,72 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: boolean
-                    example: false
-                  message:
+                  result:
                     type: string
-                    example: Operation failed
+                    enum: [ KO ]
+                    example: KO
+                  message:
+                    oneOf:
+                      - $ref: '#/components/parameters/error_400_message_missing_api_token'
+                      - $ref: '#/components/parameters/error_400_message_missing_reason_field'
+                      - $ref: '#/components/parameters/error_400_invalid_update_message_schema'
+                      - $ref: '#/components/parameters/error_400_invalid_status_value'
+                      - $ref: '#/components/parameters/error_400_task_not_found'
+
+        '401':
+          description: KO
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    enum: [ KO ]
+                    example: KO
+                  message:
+                    oneOf:
+                      - $ref: '#/components/parameters/error_401_invalid_api_token'
+
+        '405':
+          description: KO
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    enum: [ KO ]
+                    example: KO
+                  message:
+                    oneOf:
+                      - $ref: '#/components/parameters/error_405_invalid_http_method'
+
+        '500':
+          description: KO
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    enum: [ KO ]
+                    example: KO
+                  message:
+                    oneOf:
+                      - $ref: '#/components/parameters/error_500_invalid_task_type'
+                      - $ref: '#/components/parameters/error_500_task_update_failed'
+                      - $ref: '#/components/parameters/error_500_invalid_log_message_length'
+
 components:
+  ################################
+  ########### SCHEMAS ############
+  ################################
   schemas:
     heartbeat_task_success:
+      type: object
       example: 'token=5544ea2e&status=OK'
       properties:
         token:
@@ -97,32 +153,32 @@ components:
         status:
           $ref: '#/components/parameters/status'
         reason:
-          required: false
-          $ref: '#/components/parameters/reason'
+          $ref: '#/components/parameters/optional_reason'
 
     heartbeat_task_failure:
-      example: 'token=5544ea2e&status=OK&reason=No space left on device'
-      properties:
-        token:
-          $ref: '#/components/parameters/token'
-        status:
-          $ref: '#/components/parameters/status'
-        reason:
-          required: true
-          $ref: '#/components/parameters/reason'
+      allOf:
+        - $ref: '#/components/schemas/heartbeat_task_success'
+        - example: 'token=5544ea2e&status=OK&reason=No space left on device'
+        - properties:
+            reason:
+              $ref: '#/components/parameters/required_reason'
 
     log_task_update:
       example: 'token=5544ea2e&severity=warning&message=Cannot fetch user avatar'
+      type: object
       properties:
         token:
           $ref: '#/components/parameters/token'
         status:
           $ref: '#/components/parameters/status'
         message:
-          $ref: '#/components/parameters/reason'
+          $ref: '#/components/parameters/log_message'
         severity:
           $ref: '#/components/parameters/severity'
 
+  ##################################
+  ########## PARAMETERS ############
+  ##################################
   parameters:
     status:
       name: status
@@ -134,10 +190,27 @@ components:
           - true
           - false
 
-    reason:
-      name: reason
+    token:
+      name: token
       in: query
-      description: Description of new status' cause
+      description: Task-specific API key or user's API key
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9]+$'
+
+    optional_reason:
+      name: optional_reason
+      in: query
+      required: false
+      description: Optional description of new status' cause
+      schema:
+        type: string
+
+    required_reason:
+      name: required_reason
+      in: query
+      required: true
+      description: Required description of new status' cause
       schema:
         type: string
 
@@ -149,10 +222,102 @@ components:
         type: string
         enum: [ debug, info, warning, error, alert ]
 
-    token:
-      name: token
+    log_message:
+      name: log_message
       in: query
-      description: Task-specific API key or user's API key
+      description: Severity level of corresponding log message
       schema:
         type: string
-        pattern: '^[a-zA-Z0-9]+$'
+        minLength: 2
+        maxLength: 256
+        example: No space left on device
+
+    error_400_message_missing_api_token:
+      name: error_message_missing_api_token
+      in: query
+      description: Error response for a missing API token in a user request
+      schema:
+        type: string
+        enum: [ 'token field is necessary' ]
+        example: 'token field is necessary'
+
+    error_400_message_missing_reason_field:
+      name: error_message_missing_reason_field
+      in: query
+      description: Error response for a missing reason field for a heartbeat update message signaling a failure
+      schema:
+        type: string
+        enum: [ 'when status is KO, reason field is obligatory' ]
+        example: 'when status is KO, reason field is obligatory'
+
+    error_400_invalid_update_message_schema:
+      name: error_invalid_update_message_schema
+      in: query
+      description: Error response for an invalid update message. status and reason fields are for heartbeat messages, and message field is for log messages. They cannot be mixed together.
+      schema:
+        type: string
+        enum: [ 'status and reason fields cannot be given together with message field' ]
+        example: 'status and reason fields cannot be given together with message field'
+
+    error_400_invalid_status_value:
+      name: error_invalid_status_value
+      in: query
+      description: status field must have either OK or KO as value. Any other value is invalid.
+      schema:
+        type: string
+        enum: [ 'Invalid status, ignoring this command' ]
+        example: 'Invalid status, ignoring this command'
+
+    error_400_task_not_found:
+      name: error_400_task_not_found
+      in: query
+      description: Cannot find a task with given task ID
+      schema:
+        type: string
+        enum: [ 'Task not found' ]
+        example: 'Task not found'
+
+    error_401_invalid_api_token:
+      name: error_401_invalid_api_token
+      in: query
+      description: Given task-specific or user API token is not valid.
+      schema:
+        type: string
+        enum: [ 'Invalid API token' ]
+        example: 'Invalid API token'
+
+    error_405_invalid_http_method:
+      name: error_401_invalid_api_token
+      in: query
+      description: A HTTP method other than POST is used, and it is not supported.
+      schema:
+        type: string
+        enum: [ 'Only POST method is allowed' ]
+        example: 'Only POST method is allowed'
+
+    error_500_invalid_task_type:
+      name: error_500_invalid_task_type
+      in: query
+      description: Only heartbeat and log tasks are available in the REST API
+      schema:
+        type: string
+        enum: [ 'REST API is available only for heartbeat and log tasks' ]
+        example: 'REST API is available only for heartbeat and log tasks'
+
+    error_500_task_update_failed:
+      name: error_500_task_update_failed
+      in: query
+      description: Task update failed. Usually due to an internal error. Contact support.
+      schema:
+        type: string
+        enum: [ 'Task update failed' ]
+        example: 'Task update failed'
+
+    error_500_invalid_log_message_length:
+      name: error_500_invalid_log_message_length
+      in: query
+      description: Log messages cannot be empty or longer than the maximum size allowed.
+      schema:
+        type: string
+        enum: [ 'Log messages cannot be empty nor longer than 128 characters' ]
+        example: 'Log messages cannot be empty nor longer than 128 characters'
